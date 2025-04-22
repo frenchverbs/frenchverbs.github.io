@@ -22,9 +22,28 @@
     #total-time { margin-top: 1rem; font-size: 0.9rem; color: #666; }
     #verb-list { text-align: left; max-width: 600px; margin: 1rem auto; background: #fff; padding: 1rem; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
     #verb-list ul { list-style: none; padding: 0; }
-    #verb-list li { padding: 0.3rem 0; border-bottom: 1px solid #eee; }
-    #verb-list li span { float: right; font-weight: bold; }
-    #prefix { font-weight: bold; margin-right: 0.5rem; }
+    #verb-list li { position: relative; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+    #verb-list li span.mastery { float: right; font-weight: bold; }
+    .info-icon {
+      cursor: pointer;
+      margin-left: 0.5rem;
+      color: #007bff;
+      font-weight: bold;
+    }
+    .details-container {
+      display: none;
+      margin-top: 0.5rem;
+    }
+    .detail-table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 0.9rem;
+    }
+    .detail-table th, .detail-table td {
+      border: 1px solid #ddd;
+      padding: 0.4rem;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -86,6 +105,8 @@
     import { verbs } from './verbs.js';
 
     const persons = ["je", "tu", "il/elle", "nous", "vous", "ils/elles"];
+    const tenses = ["present", "imparfait", "passe"];
+    const tensesDisplay = { present: 'Présent', imparfait: 'Imparfait', passe: 'Passé composé' };
     let excludedVerbs = [], excludedTenses = [], excludedPersons = [];
     let sessionEnd, sessionStart, sessionLength;
     let currentVerb, currentTense, currentPerson, correctAnswer;
@@ -110,6 +131,18 @@
 
     totalDisplay.textContent = `Bisher insgesamt geübt: ${totalMinutes} Minute(n)`;
     setup.style.display = "block";
+
+    function computeOverallScore(verb) {
+      const stats = learnedStats[verb];
+      if (!stats) return 0;
+      let total = 0, count = 0;
+      tenses.forEach(t => {
+        if (stats[t]) {
+          Object.values(stats[t]).forEach(s => { total += s; count++; });
+        }
+      });
+      return count ? Math.round(total / count) : 0;
+    }
 
     function showFilter() {
       setup.style.display = "none";
@@ -142,13 +175,11 @@
       clearInterval(interval);
       interval = setInterval(() => {
         const timeLeft = sessionEnd - Date.now();
-        if (timeLeft <= 0) {
-          clearInterval(interval);
-          finishSession();
-        } else {
+        if (timeLeft <= 0) { clearInterval(interval); finishSession(); }
+        else {
           const min = Math.floor(timeLeft / 60000);
           const sec = Math.floor((timeLeft % 60000) / 1000);
-          timer.textContent = `Verbleibend: ${min}:${sec.toString().padStart(2, '0')}`;
+          timer.textContent = `Verbleibend: ${min}:${sec.toString().padStart(2,'0')}`;
         }
       }, 1000);
     }
@@ -156,7 +187,7 @@
     function weightedRandomVerb() {
       const keys = Object.keys(verbs);
       const pool = keys.flatMap(key => {
-        const score = learnedStats[key]?.score || 0;
+        const score = computeOverallScore(key);
         const weight = Math.max(1, 5 - score);
         return Array(weight).fill(key);
       });
@@ -165,31 +196,20 @@
 
     function nextQuestion() {
       let tries = 0;
-      const availableTenses = ["present", "imparfait", "passe"].filter(t => !excludedTenses.includes(t));
-      const availablePersons = [0, 1, 2, 3, 4, 5].filter(p => !excludedPersons.includes(p));
-
-      if (availableTenses.length === 0 || availablePersons.length === 0) {
-        alert("Bitte wähle mindestens eine Zeitform und eine Person aus.");
-        abortSession();
-        return;
-      }
-
+      const availableTenses = tenses.filter(t => !excludedTenses.includes(t));
+      const availablePersons = [0,1,2,3,4,5].filter(p => !excludedPersons.includes(p));
+      if (availableTenses.length===0||availablePersons.length===0) { alert("Bitte wähle mindestens eine Zeitform und eine Person aus."); abortSession(); return; }
       do {
         currentVerb = weightedRandomVerb();
-        currentTense = availableTenses[Math.floor(Math.random() * availableTenses.length)];
-        currentPerson = availablePersons[Math.floor(Math.random() * availablePersons.length)];
-        tries++;
-        if (tries > 100) {
-          alert("Keine gültige Kombination gefunden. Bitte überprüfe deine Filter.");
-          abortSession();
-          return;
-        }
+        currentTense = availableTenses[Math.floor(Math.random()*availableTenses.length)];
+        currentPerson = availablePersons[Math.floor(Math.random()*availablePersons.length)];
+        tries++; if (tries>100) { alert("Keine gültige Kombination gefunden. Bitte überprüfe deine Filter."); abortSession(); return; }
       } while (excludedVerbs.includes(currentVerb));
 
       const form = verbs[currentVerb][currentTense];
       correctAnswer = form[currentPerson];
       questionBox.textContent = `${currentVerb} – ${currentTense} – ${persons[currentPerson]}`;
-      prefix.textContent = (correctAnswer.match(/^(j'|j’|je|tu|il|elle|nous|vous|ils|elles|je me|je m'|je m’)/i) || [''])[0] + ' ';
+      prefix.textContent = (correctAnswer.match(/^(j'|j’|je|tu|il|elle|nous|vous|ils|elles|je me|je m'|je m’)/i)||[''])[0]+' ';
       feedback.textContent = "";
       answerInput.value = "";
       answerInput.focus();
@@ -202,21 +222,26 @@
       const user = clean(answerInput.value);
       const correct = clean(correctAnswer);
 
-      if (!learnedStats[currentVerb]) learnedStats[currentVerb] = { score: 0 };
+      // initialize nested stats
+      learnedStats[currentVerb] = learnedStats[currentVerb] || {};
+      learnedStats[currentVerb][currentTense] = learnedStats[currentVerb][currentTense] || {};
+      const prev = learnedStats[currentVerb][currentTense][currentPerson] || 0;
+      let updated;
       if (user === correct) {
-        learnedStats[currentVerb].score = Math.min(5, learnedStats[currentVerb].score + 1);
+        updated = Math.min(5, prev + 1);
         feedback.textContent = "✅ Richtig!";
       } else {
-        learnedStats[currentVerb].score = Math.max(0, learnedStats[currentVerb].score - 1);
+        updated = Math.max(0, prev - 1);
         feedback.textContent = `❌ Falsch. Richtig wäre: ${correctAnswer}`;
       }
+      learnedStats[currentVerb][currentTense][currentPerson] = updated;
       localStorage.setItem("learnedStats", JSON.stringify(learnedStats));
       submitBtn.style.display = "none";
       nextBtn.style.display = "inline-block";
     }
 
     function finishSession() {
-      const actualMinutes = Math.round((Date.now() - sessionStart) / 60000);
+      const actualMinutes = Math.round((Date.now() - sessionStart)/60000);
       totalMinutes += actualMinutes;
       localStorage.setItem("totalMinutes", totalMinutes);
       quiz.style.display = "none";
@@ -228,17 +253,46 @@
       finishSession();
     }
 
+    function toggleDetails(verb, container) {
+      if (container.innerHTML) {
+        container.style.display = container.style.display === 'none' ? 'block' : 'none';
+        return;
+      }
+      let html = '<table class="detail-table"><tr><th>Zeitform</th>';
+      persons.forEach(p => { html += `<th>${p}</th>`; });
+      html += '</tr>';
+      tenses.forEach(t => {
+        html += `<tr><td>${tensesDisplay[t]}</td>`;
+        persons.forEach((_, i) => {
+          const s = (learnedStats[verb] && learnedStats[verb][t] && learnedStats[verb][t][i]) || 0;
+          let icon = '❌'; if (s >=5) icon='✅'; else if (s>=3) icon='🟡';
+          html += `<td>${icon}</td>`;
+        });
+        html += '</tr>';
+      });
+      html += '</table>';
+      container.innerHTML = html;
+      container.style.display = 'block';
+    }
+
     function showOverview() {
       setup.style.display = "none";
       overview.style.display = "block";
       const entries = Object.keys(verbs).sort().map(key => {
-        const score = learnedStats[key]?.score || 0;
+        const score = computeOverallScore(key);
         let level = "❌ schlecht";
         if (score >= 5) level = "✅ gemeistert";
         else if (score >= 3) level = "🟡 ok";
-        return `<li>${key}<span>${level}</span></li>`;
+        return `<li data-verb="${key}">${key}<span class="mastery">${level}</span><span class="info-icon" title="Details">(i)</span><div class="details-container"></div></li>`;
       }).join("");
       verbList.innerHTML = `<h3>Dein Lernstand:</h3><ul>${entries}</ul>`;
+      document.querySelectorAll('.info-icon').forEach(el => {
+        el.addEventListener('click', e => {
+          const li = e.target.closest('li');
+          const verb = li.getAttribute('data-verb');
+          toggleDetails(verb, li.querySelector('.details-container'));
+        });
+      });
     }
 
     function restart() {
@@ -256,10 +310,8 @@
     window.showFilter = showFilter;
     window.hideFilter = hideFilter;
     nextBtn.addEventListener("click", nextQuestion);
-document.getElementById("submit-btn").addEventListener("click", submitAnswer);
-    answerInput.addEventListener("keydown", e => {
-      if (e.key === "Enter" && submitBtn.style.display !== "none") submitAnswer();
-    });
+    submitBtn.addEventListener("click", submitAnswer);
+    answerInput.addEventListener("keydown", e => { if (e.key === "Enter" && submitBtn.style.display !== "none") submitAnswer(); });
   </script>
 </body>
 </html>
