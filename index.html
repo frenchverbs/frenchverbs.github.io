@@ -151,8 +151,9 @@
     }
 
     function submitAnswer() {
-      const user = answerInput.value.trim().toLowerCase();
-      const correct = correctAnswer.toLowerCase();
+      const user = answerInput.value.trim().toLowerCase().replace(/^(je|tu|il|elle|nous|vous|ils|elles)\s+/, "");
+      const correct = correctAnswer.toLowerCase().replace(/^(je|tu|il|elle|nous|vous|ils|elles)\s+/, "");
+
 
       if (!learnedStats[currentVerb]) learnedStats[currentVerb] = { score: 0 };
       if (user === correct) {
