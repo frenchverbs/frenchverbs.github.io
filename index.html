@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Französisch Verben Quiz</title>
+  <style>
+    body { font-family: sans-serif; background: #f0f4f8; padding: 2rem; text-align: center; }
+    h1 { margin-bottom: 1rem; color: #333; }
+    #setup, #quiz, #result, #overview { display: none; margin-top: 2rem; }
+    select, button, input[type="number"], input[type="text"] {
+      font-size: 1rem;
+      margin: 0.5rem;
+      padding: 0.5rem 1rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button { cursor: pointer; background-color: #007bff; color: white; border: none; }
+    button:hover { background-color: #0056b3; }
+    #question-box { font-size: 1.2rem; margin-top: 1rem; }
+    #feedback { margin-top: 1rem; font-weight: bold; min-height: 1.5rem; }
+    #total-time { margin-top: 1rem; font-size: 0.9rem; color: #666; }
+    #verb-list { text-align: left; max-width: 600px; margin: 1rem auto; background: #fff; padding: 1rem; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    #verb-list ul { list-style: none; padding: 0; }
+    #verb-list li { padding: 0.3rem 0; border-bottom: 1px solid #eee; }
+    #verb-list li span { float: right; font-weight: bold; }
+    #prefix { font-weight: bold; margin-right: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Französisch Verben Quiz</h1>
+  <div id="setup">
+    <label>Wie viele Minuten möchtest du üben?</label><br>
+    <input id="minutes" type="number" value="10" min="1" max="120"> Minuten<br>
+    <button onclick="startSession()">Starten</button>
+    <button onclick="showOverview()" style="background-color: #6c757d;">Lernübersicht</button>
+    <div id="total-time"></div>
+    <a href="https://cestca.vocatrainer.memorylab.app/#/lessons?tab=library">VocabTrainer</a>
+  </div>
+
+  <div id="quiz">
+    <div id="timer"></div>
+    <div id="question-box"></div>
+    <div><span id="prefix"></span><input type="text" id="answer" placeholder="Antwort..." autocomplete="off"></div>
+    <div>
+      <button id="submit-btn" onclick="submitAnswer()">Antwort überprüfen</button>
+      <button id="next-btn" onclick="nextQuestion()" style="display:none">Nächste Frage</button>
+      <button onclick="abortSession()" style="background-color:#dc3545;">Abbrechen</button>
+    </div>
+    <div id="feedback"></div>
+  </div>
+
+  <div id="result">
+    <p>Fertig! 🎉</p>
+    <button onclick="restart()">Nochmal üben</button>
+  </div>
+
+  <div id="overview">
+    <div id="verb-list"></div>
+    <button onclick="restart()">Zurück</button>
+  </div>
+
+  <script type="module">
+    import { verbs } from './verbs.js';
+
+    const persons = ["je", "tu", "il/elle", "nous", "vous", "ils/elles"];
+    let sessionEnd = null;
+    let sessionStart = null;
+    let sessionLength = null;
+    let learnedStats = JSON.parse(localStorage.getItem("learnedStats") || "{}");
+    let totalMinutes = parseInt(localStorage.getItem("totalMinutes") || "0");
+    let currentVerb = null, currentTense = null, currentPerson = null, correctAnswer = null;
+    let interval = null;
+
+    const setup = document.getElementById("setup");
+    const quiz = document.getElementById("quiz");
+    const result = document.getElementById("result");
+    const overview = document.getElementById("overview");
+    const questionBox = document.getElementById("question-box");
+    const feedback = document.getElementById("feedback");
+    const timer = document.getElementById("timer");
+    const answerInput = document.getElementById("answer");
+    const totalDisplay = document.getElementById("total-time");
+    const verbList = document.getElementById("verb-list");
+    const prefix = document.getElementById("prefix");
+    const submitBtn = document.getElementById("submit-btn");
+    const nextBtn = document.getElementById("next-btn");
+
+    totalDisplay.textContent = `Bisher insgesamt geübt: ${totalMinutes} Minute(n)`;
+    setup.style.display = "block";
+
+    function startSession() {
+      const minutes = parseInt(document.getElementById("minutes").value);
+      if (!minutes || minutes <= 0) return alert("Bitte eine gültige Zeit angeben.");
+      sessionLength = minutes;
+      sessionStart = Date.now();
+      sessionEnd = sessionStart + minutes * 60 * 1000;
+      setup.style.display = "none";
+      quiz.style.display = "block";
+      nextQuestion();
+      updateTimer();
+    }
+
+    function updateTimer() {
+      clearInterval(interval);
+      interval = setInterval(() => {
+        const timeLeft = sessionEnd - Date.now();
+        if (timeLeft <= 0) {
+          clearInterval(interval);
+          finishSession();
+        } else {
+          const min = Math.floor(timeLeft / 60000);
+          const sec = Math.floor((timeLeft % 60000) / 1000);
+          timer.textContent = `Verbleibend: ${min}:${sec.toString().padStart(2, '0')}`;
+        }
+      }, 1000);
+    }
+
+    function weightedRandomVerb() {
+      const keys = Object.keys(verbs);
+      const pool = keys.flatMap(key => {
+        const score = learnedStats[key]?.score || 0;
+        const weight = Math.max(1, 5 - score);
+        return Array(weight).fill(key);
+      });
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    function nextQuestionWrapper() {
+      feedback.textContent = "";
+      submitBtn.style.display = "inline-block";
+      nextBtn.style.display = "none";
+      answerInput.value = "";
+      nextQuestion();
+    }
+
+    function nextQuestion() {
+      currentVerb = weightedRandomVerb();
+      currentTense = ["present", "imparfait", "passe"][Math.floor(Math.random() * 3)];
+      currentPerson = Math.floor(Math.random() * 6);
+
+      const form = verbs[currentVerb][currentTense];
+      correctAnswer = form[currentPerson];
+      questionBox.textContent = `${currentVerb} – ${currentTense} – ${persons[currentPerson]}`;
+      prefix.textContent = persons[currentPerson];
+      feedback.textContent = "";
+      answerInput.value = "";
+      answerInput.focus();
+
+      submitBtn.style.display = "inline-block";
+      nextBtn.style.display = "none";
+    }
+
+    function submitAnswer() {
+      const user = answerInput.value.trim().toLowerCase();
+      const correct = correctAnswer.toLowerCase();
+
+      if (!learnedStats[currentVerb]) learnedStats[currentVerb] = { score: 0 };
+      if (user === correct) {
+        learnedStats[currentVerb].score = Math.min(5, learnedStats[currentVerb].score + 1);
+        feedback.textContent = "✅ Richtig!";
+      } else {
+        learnedStats[currentVerb].score = Math.max(0, learnedStats[currentVerb].score - 1);
+        feedback.textContent = `❌ Falsch. Richtig wäre: ${correctAnswer}`;
+      }
+      localStorage.setItem("learnedStats", JSON.stringify(learnedStats));
+
+      submitBtn.style.display = "none";
+      nextBtn.style.display = "inline-block";
+    }
+
+    answerInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && submitBtn.style.display !== "none") submitAnswer();
+    });
+
+    function finishSession() {
+      const actualMinutes = Math.round((Date.now() - sessionStart) / 60000);
+      totalMinutes += actualMinutes;
+      localStorage.setItem("totalMinutes", totalMinutes);
+      quiz.style.display = "none";
+      result.style.display = "block";
+    }
+
+    function abortSession() {
+      clearInterval(interval);
+      finishSession();
+    }
+
+    function showOverview() {
+      setup.style.display = "none";
+      overview.style.display = "block";
+      const entries = Object.keys(verbs).sort().map(key => {
+        const score = learnedStats[key]?.score || 0;
+        let level = "❌ schlecht";
+        if (score >= 5) level = "✅ gemeistert";
+        else if (score >= 3) level = "🟡 ok";
+        return `<li>${key}<span>${level}</span></li>`;
+      }).join("");
+      verbList.innerHTML = `<h3>Dein Lernstand:</h3><ul>${entries}</ul>`;
+    }
+
+    function restart() {
+      result.style.display = "none";
+      overview.style.display = "none";
+      setup.style.display = "block";
+      totalDisplay.textContent = `Bisher insgesamt geübt: ${totalMinutes} Minute(n)`;
+    }
+
+    window.submitAnswer = submitAnswer;
+    window.startSession = startSession;
+    window.abortSession = abortSession;
+    window.restart = restart;
+    window.showOverview = showOverview;
+    nextBtn.addEventListener("click", nextQuestionWrapper);
+  </script>
+</body>
+</html>
