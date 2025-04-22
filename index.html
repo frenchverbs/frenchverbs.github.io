@@ -6,7 +6,7 @@
   <style>
     body { font-family: sans-serif; background: #f0f4f8; padding: 2rem; text-align: center; }
     h1 { margin-bottom: 1rem; color: #333; }
-    #setup, #quiz, #result, #overview { display: none; margin-top: 2rem; }
+    #setup, #quiz, #result, #overview, #filter { display: none; margin-top: 2rem; }
     select, button, input[type="number"], input[type="text"] {
       font-size: 1rem;
       margin: 0.5rem;
@@ -33,8 +33,30 @@
     <input id="minutes" type="number" value="10" min="1" max="120"> Minuten<br>
     <button onclick="startSession()">Starten</button>
     <button onclick="showOverview()" style="background-color: #6c757d;">Lernübersicht</button>
+    <button onclick="showFilter()" style="background-color: #17a2b8;">Filter</button>
     <div id="total-time"></div>
     <a href="https://cestca.vocatrainer.memorylab.app/#/lessons?tab=library">VocabTrainer</a>
+  </div>
+
+  <div id="filter">
+    <h2>Filtereinstellungen</h2>
+    <label>Verben ausschließen (Komma-getrennt):</label><br>
+    <input id="excluded-verbs" type="text" placeholder="z. B. être, avoir"><br>
+
+    <label>Zeiten ausschließen:</label><br>
+    <label><input type="checkbox" class="excluded-tense" value="present"> Présent</label>
+    <label><input type="checkbox" class="excluded-tense" value="imparfait"> Imparfait</label>
+    <label><input type="checkbox" class="excluded-tense" value="passe"> Passé composé</label><br>
+
+    <label>Personen ausschließen:</label><br>
+    <label><input type="checkbox" class="excluded-person" value="0"> je</label>
+    <label><input type="checkbox" class="excluded-person" value="1"> tu</label>
+    <label><input type="checkbox" class="excluded-person" value="2"> il/elle</label>
+    <label><input type="checkbox" class="excluded-person" value="3"> nous</label>
+    <label><input type="checkbox" class="excluded-person" value="4"> vous</label>
+    <label><input type="checkbox" class="excluded-person" value="5"> ils/elles</label><br><br>
+
+    <button onclick="hideFilter()">Zurück</button>
   </div>
 
   <div id="quiz">
@@ -63,30 +85,40 @@
     import { verbs } from './verbs.js';
 
     const persons = ["je", "tu", "il/elle", "nous", "vous", "ils/elles"];
-    let sessionEnd = null;
-    let sessionStart = null;
-    let sessionLength = null;
+    let excludedVerbs = [], excludedTenses = [], excludedPersons = [];
+    let sessionEnd, sessionStart, sessionLength;
+    let currentVerb, currentTense, currentPerson, correctAnswer;
     let learnedStats = JSON.parse(localStorage.getItem("learnedStats") || "{}");
     let totalMinutes = parseInt(localStorage.getItem("totalMinutes") || "0");
-    let currentVerb = null, currentTense = null, currentPerson = null, correctAnswer = null;
     let interval = null;
 
     const setup = document.getElementById("setup");
     const quiz = document.getElementById("quiz");
     const result = document.getElementById("result");
     const overview = document.getElementById("overview");
+    const filter = document.getElementById("filter");
     const questionBox = document.getElementById("question-box");
     const feedback = document.getElementById("feedback");
     const timer = document.getElementById("timer");
     const answerInput = document.getElementById("answer");
+    const prefix = document.getElementById("prefix");
     const totalDisplay = document.getElementById("total-time");
     const verbList = document.getElementById("verb-list");
-    const prefix = document.getElementById("prefix");
     const submitBtn = document.getElementById("submit-btn");
     const nextBtn = document.getElementById("next-btn");
 
     totalDisplay.textContent = `Bisher insgesamt geübt: ${totalMinutes} Minute(n)`;
     setup.style.display = "block";
+
+    function showFilter() {
+      setup.style.display = "none";
+      filter.style.display = "block";
+    }
+
+    function hideFilter() {
+      filter.style.display = "none";
+      setup.style.display = "block";
+    }
 
     function startSession() {
       const minutes = parseInt(document.getElementById("minutes").value);
@@ -94,6 +126,11 @@
       sessionLength = minutes;
       sessionStart = Date.now();
       sessionEnd = sessionStart + minutes * 60 * 1000;
+
+      excludedVerbs = document.getElementById("excluded-verbs").value.split(",").map(v => v.trim()).filter(Boolean);
+      excludedTenses = Array.from(document.querySelectorAll(".excluded-tense:checked")).map(cb => cb.value);
+      excludedPersons = Array.from(document.querySelectorAll(".excluded-person:checked")).map(cb => parseInt(cb.value));
+
       setup.style.display = "none";
       quiz.style.display = "block";
       nextQuestion();
@@ -125,35 +162,44 @@
       return pool[Math.floor(Math.random() * pool.length)];
     }
 
-    function nextQuestionWrapper() {
-      feedback.textContent = "";
-      submitBtn.style.display = "inline-block";
-      nextBtn.style.display = "none";
-      answerInput.value = "";
-      nextQuestion();
-    }
-
     function nextQuestion() {
-      currentVerb = weightedRandomVerb();
-      currentTense = ["present", "imparfait", "passe"][Math.floor(Math.random() * 3)];
-      currentPerson = Math.floor(Math.random() * 6);
+      let tries = 0;
+      const availableTenses = ["present", "imparfait", "passe"].filter(t => !excludedTenses.includes(t));
+      const availablePersons = [0, 1, 2, 3, 4, 5].filter(p => !excludedPersons.includes(p));
+
+      if (availableTenses.length === 0 || availablePersons.length === 0) {
+        alert("Bitte wähle mindestens eine Zeitform und eine Person aus.");
+        abortSession();
+        return;
+      }
+
+      do {
+        currentVerb = weightedRandomVerb();
+        currentTense = availableTenses[Math.floor(Math.random() * availableTenses.length)];
+        currentPerson = availablePersons[Math.floor(Math.random() * availablePersons.length)];
+        tries++;
+        if (tries > 100) {
+          alert("Keine gültige Kombination gefunden. Bitte überprüfe deine Filter.");
+          abortSession();
+          return;
+        }
+      } while (excludedVerbs.includes(currentVerb));
 
       const form = verbs[currentVerb][currentTense];
       correctAnswer = form[currentPerson];
       questionBox.textContent = `${currentVerb} – ${currentTense} – ${persons[currentPerson]}`;
-      prefix.textContent = persons[currentPerson];
+      prefix.textContent = (correctAnswer.match(/^(j'|j’|je|tu|il|elle|nous|vous|ils|elles|je me|je m'|je m’)/i) || [''])[0] + ' ';
       feedback.textContent = "";
       answerInput.value = "";
       answerInput.focus();
-
       submitBtn.style.display = "inline-block";
       nextBtn.style.display = "none";
     }
 
     function submitAnswer() {
-      const user = answerInput.value.trim().toLowerCase().replace(/^(je|tu|il|elle|nous|vous|ils|elles)\s+/, "");
-      const correct = correctAnswer.toLowerCase().replace(/^(je|tu|il|elle|nous|vous|ils|elles)\s+/, "");
-
+      const clean = s => s.toLowerCase().replace(/^(je|j'|j’|tu|il|elle|nous|vous|ils|elles|je me|je m'|je m’)\s+/, "").trim();
+      const user = clean(answerInput.value);
+      const correct = clean(correctAnswer);
 
       if (!learnedStats[currentVerb]) learnedStats[currentVerb] = { score: 0 };
       if (user === correct) {
@@ -164,14 +210,9 @@
         feedback.textContent = `❌ Falsch. Richtig wäre: ${correctAnswer}`;
       }
       localStorage.setItem("learnedStats", JSON.stringify(learnedStats));
-
       submitBtn.style.display = "none";
       nextBtn.style.display = "inline-block";
     }
-
-    answerInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && submitBtn.style.display !== "none") submitAnswer();
-    });
 
     function finishSession() {
       const actualMinutes = Math.round((Date.now() - sessionStart) / 60000);
@@ -202,16 +243,22 @@
     function restart() {
       result.style.display = "none";
       overview.style.display = "none";
+      filter.style.display = "none";
       setup.style.display = "block";
       totalDisplay.textContent = `Bisher insgesamt geübt: ${totalMinutes} Minute(n)`;
     }
 
-    window.submitAnswer = submitAnswer;
     window.startSession = startSession;
     window.abortSession = abortSession;
     window.restart = restart;
     window.showOverview = showOverview;
-    nextBtn.addEventListener("click", nextQuestionWrapper);
+    window.showFilter = showFilter;
+    window.hideFilter = hideFilter;
+    nextBtn.addEventListener("click", nextQuestion);
+document.getElementById("submit-btn").addEventListener("click", submitAnswer);
+    answerInput.addEventListener("keydown", e => {
+      if (e.key === "Enter" && submitBtn.style.display !== "none") submitAnswer();
+    });
   </script>
 </body>
 </html>
