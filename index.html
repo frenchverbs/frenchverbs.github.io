@@ -103,7 +103,7 @@
 
   <script type="module">
     import { verbs } from './verbs.js';
-
+    
     const persons = ["je", "tu", "il/elle", "nous", "vous", "ils/elles"];
     const tenses = ["present", "imparfait", "passe"];
     const tensesDisplay = { present: 'Présent', imparfait: 'Imparfait', passe: 'Passé composé' };
@@ -113,7 +113,7 @@
     let learnedStats = JSON.parse(localStorage.getItem("learnedStats") || "{}");
     let totalMinutes = parseInt(localStorage.getItem("totalMinutes") || "0");
     let interval = null;
-
+    
     const setup = document.getElementById("setup");
     const quiz = document.getElementById("quiz");
     const result = document.getElementById("result");
@@ -128,10 +128,31 @@
     const verbList = document.getElementById("verb-list");
     const submitBtn = document.getElementById("submit-btn");
     const nextBtn = document.getElementById("next-btn");
-
+    
     totalDisplay.textContent = `Bisher insgesamt geübt: ${totalMinutes} Minute(n)`;
     setup.style.display = "block";
+    
+ // Web Speech API Setup
+const synth = window.speechSynthesis;
+let frenchVoice = null;
 
+function loadVoices() {
+  const voices = synth.getVoices();
+  frenchVoice = voices.find(voice => voice.lang.startsWith('fr'));
+}
+
+synth.onvoiceschanged = loadVoices; // Stimmen laden, wenn sie verfügbar sind
+
+function speak(text) {
+  if (!synth) return;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'fr-FR';
+  if (frenchVoice) utterance.voice = frenchVoice; // richtige Stimme zuweisen
+  synth.speak(utterance);
+}
+
+
+    
     function computeOverallScore(verb) {
       const stats = learnedStats[verb];
       if (!stats) return 0;
@@ -143,34 +164,34 @@
       });
       return count ? Math.round(total / count) : 0;
     }
-
+    
     function showFilter() {
       setup.style.display = "none";
       filter.style.display = "block";
     }
-
+    
     function hideFilter() {
       filter.style.display = "none";
       setup.style.display = "block";
     }
-
+    
     function startSession() {
       const minutes = parseInt(document.getElementById("minutes").value);
       if (!minutes || minutes <= 0) return alert("Bitte eine gültige Zeit angeben.");
       sessionLength = minutes;
       sessionStart = Date.now();
       sessionEnd = sessionStart + minutes * 60 * 1000;
-
+    
       excludedVerbs = document.getElementById("excluded-verbs").value.split(",").map(v => v.trim()).filter(Boolean);
       excludedTenses = Array.from(document.querySelectorAll(".excluded-tense:checked")).map(cb => cb.value);
       excludedPersons = Array.from(document.querySelectorAll(".excluded-person:checked")).map(cb => parseInt(cb.value));
-
+    
       setup.style.display = "none";
       quiz.style.display = "block";
       nextQuestion();
       updateTimer();
     }
-
+    
     function updateTimer() {
       clearInterval(interval);
       interval = setInterval(() => {
@@ -183,7 +204,7 @@
         }
       }, 1000);
     }
-
+    
     function weightedRandomVerb() {
       const keys = Object.keys(verbs);
       const pool = keys.flatMap(key => {
@@ -193,7 +214,7 @@
       });
       return pool[Math.floor(Math.random() * pool.length)];
     }
-
+    
     function nextQuestion() {
       let tries = 0;
       const availableTenses = tenses.filter(t => !excludedTenses.includes(t));
@@ -205,7 +226,7 @@
         currentPerson = availablePersons[Math.floor(Math.random()*availablePersons.length)];
         tries++; if (tries>100) { alert("Keine gültige Kombination gefunden. Bitte überprüfe deine Filter."); abortSession(); return; }
       } while (excludedVerbs.includes(currentVerb));
-
+    
       const form = verbs[currentVerb][currentTense];
       correctAnswer = form[currentPerson];
       questionBox.textContent = `${currentVerb} – ${currentTense} – ${persons[currentPerson]}`;
@@ -215,13 +236,16 @@
       answerInput.focus();
       submitBtn.style.display = "inline-block";
       nextBtn.style.display = "none";
+    
+      // Spreche das Infinitiv sofort
+      speak(currentVerb);
     }
-
+    
     function submitAnswer() {
       const clean = s => s.toLowerCase().replace(/^(je|j'|j’|tu|il|elle|nous|vous|ils|elles|je me|je m'|je m’)\s+/, "").trim();
       const user = clean(answerInput.value);
       const correct = clean(correctAnswer);
-
+    
       // initialize nested stats
       learnedStats[currentVerb] = learnedStats[currentVerb] || {};
       learnedStats[currentVerb][currentTense] = learnedStats[currentVerb][currentTense] || {};
@@ -238,8 +262,12 @@
       localStorage.setItem("learnedStats", JSON.stringify(learnedStats));
       submitBtn.style.display = "none";
       nextBtn.style.display = "inline-block";
+    
+      // Spreche die Lösung ohne doppeltes Pronomen
+      const correctSpoken = correctAnswer.replace(/^(je|j'|j’|tu|il|elle|nous|vous|ils|elles|je me|je m'|je m’)\s+/i, '');
+      speak((prefix.textContent.trim() + ' ' + correctSpoken).trim());
     }
-
+    
     function finishSession() {
       const actualMinutes = Math.round((Date.now() - sessionStart)/60000);
       totalMinutes += actualMinutes;
@@ -247,12 +275,12 @@
       quiz.style.display = "none";
       result.style.display = "block";
     }
-
+    
     function abortSession() {
       clearInterval(interval);
       finishSession();
     }
-
+    
     function toggleDetails(verb, container) {
       if (container.innerHTML) {
         container.style.display = container.style.display === 'none' ? 'block' : 'none';
@@ -274,7 +302,7 @@
       container.innerHTML = html;
       container.style.display = 'block';
     }
-
+    
     function showOverview() {
       setup.style.display = "none";
       overview.style.display = "block";
@@ -294,7 +322,7 @@
         });
       });
     }
-
+    
     function restart() {
       result.style.display = "none";
       overview.style.display = "none";
@@ -302,7 +330,7 @@
       setup.style.display = "block";
       totalDisplay.textContent = `Bisher insgesamt geübt: ${totalMinutes} Minute(n)`;
     }
-
+    
     window.startSession = startSession;
     window.abortSession = abortSession;
     window.restart = restart;
@@ -312,6 +340,7 @@
     nextBtn.addEventListener("click", nextQuestion);
     submitBtn.addEventListener("click", submitAnswer);
     answerInput.addEventListener("keydown", e => { if (e.key === "Enter" && submitBtn.style.display !== "none") submitAnswer(); });
-  </script>
+    </script>
+    
 </body>
 </html>
