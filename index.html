@@ -62,12 +62,10 @@
     <h2>Filtereinstellungen</h2>
     <label>Verben ausschließen (Komma-getrennt):</label><br>
     <input id="excluded-verbs" type="text" placeholder="z. B. être, avoir"><br>
-
     <label>Zeiten ausschließen:</label><br>
     <label><input type="checkbox" class="excluded-tense" value="present"> Présent</label>
     <label><input type="checkbox" class="excluded-tense" value="imparfait"> Imparfait</label>
     <label><input type="checkbox" class="excluded-tense" value="passe"> Passé composé</label><br>
-
     <label>Personen ausschließen:</label><br>
     <label><input type="checkbox" class="excluded-person" value="0"> je</label>
     <label><input type="checkbox" class="excluded-person" value="1"> tu</label>
@@ -75,7 +73,6 @@
     <label><input type="checkbox" class="excluded-person" value="3"> nous</label>
     <label><input type="checkbox" class="excluded-person" value="4"> vous</label>
     <label><input type="checkbox" class="excluded-person" value="5"> ils/elles</label><br><br>
-
     <button onclick="hideFilter()">Zurück</button>
   </div>
 
@@ -84,8 +81,8 @@
     <div id="question-box"></div>
     <div><span id="prefix"></span><input type="text" id="answer" placeholder="Antwort..." autocomplete="off"></div>
     <div>
-      <button id="submit-btn" onclick="submitAnswer()">Antwort überprüfen</button>
-      <button id="next-btn" onclick="nextQuestion()" style="display:none">Nächste Frage</button>
+      <button id="submit-btn">Antwort überprüfen</button>
+      <button id="next-btn" style="display:none">Nächste Frage</button>
       <button onclick="abortSession()" style="background-color:#dc3545;">Abbrechen</button>
     </div>
     <div id="feedback"></div>
@@ -103,7 +100,7 @@
 
   <script type="module">
     import { verbs } from './verbs.js';
-    
+
     const persons = ["je", "tu", "il/elle", "nous", "vous", "ils/elles"];
     const tenses = ["present", "imparfait", "passe"];
     const tensesDisplay = { present: 'Présent', imparfait: 'Imparfait', passe: 'Passé composé' };
@@ -113,7 +110,7 @@
     let learnedStats = JSON.parse(localStorage.getItem("learnedStats") || "{}");
     let totalMinutes = parseInt(localStorage.getItem("totalMinutes") || "0");
     let interval = null;
-    
+
     const setup = document.getElementById("setup");
     const quiz = document.getElementById("quiz");
     const result = document.getElementById("result");
@@ -128,31 +125,28 @@
     const verbList = document.getElementById("verb-list");
     const submitBtn = document.getElementById("submit-btn");
     const nextBtn = document.getElementById("next-btn");
-    
+
     totalDisplay.textContent = `Bisher insgesamt geübt: ${totalMinutes} Minute(n)`;
     setup.style.display = "block";
-    
- // Web Speech API Setup
-const synth = window.speechSynthesis;
-let frenchVoice = null;
 
-function loadVoices() {
-  const voices = synth.getVoices();
-  frenchVoice = voices.find(voice => voice.lang.startsWith('fr'));
-}
+    const synth = window.speechSynthesis;
+    let frenchVoice = null;
 
-synth.onvoiceschanged = loadVoices; // Stimmen laden, wenn sie verfügbar sind
+    function loadVoices() {
+      const voices = synth.getVoices();
+      frenchVoice = voices.find(voice => voice.lang.startsWith('fr'));
+    }
 
-function speak(text) {
-  if (!synth) return;
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'fr-FR';
-  if (frenchVoice) utterance.voice = frenchVoice; // richtige Stimme zuweisen
-  synth.speak(utterance);
-}
+    synth.onvoiceschanged = loadVoices;
 
+    function speak(text) {
+      if (!synth) return;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'fr-FR';
+      if (frenchVoice) utterance.voice = frenchVoice;
+      synth.speak(utterance);
+    }
 
-    
     function computeOverallScore(verb) {
       const stats = learnedStats[verb];
       if (!stats) return 0;
@@ -164,34 +158,34 @@ function speak(text) {
       });
       return count ? Math.round(total / count) : 0;
     }
-    
+
     function showFilter() {
       setup.style.display = "none";
       filter.style.display = "block";
     }
-    
+
     function hideFilter() {
       filter.style.display = "none";
       setup.style.display = "block";
     }
-    
+
     function startSession() {
       const minutes = parseInt(document.getElementById("minutes").value);
       if (!minutes || minutes <= 0) return alert("Bitte eine gültige Zeit angeben.");
       sessionLength = minutes;
       sessionStart = Date.now();
       sessionEnd = sessionStart + minutes * 60 * 1000;
-    
+
       excludedVerbs = document.getElementById("excluded-verbs").value.split(",").map(v => v.trim()).filter(Boolean);
       excludedTenses = Array.from(document.querySelectorAll(".excluded-tense:checked")).map(cb => cb.value);
       excludedPersons = Array.from(document.querySelectorAll(".excluded-person:checked")).map(cb => parseInt(cb.value));
-    
+
       setup.style.display = "none";
       quiz.style.display = "block";
       nextQuestion();
       updateTimer();
     }
-    
+
     function updateTimer() {
       clearInterval(interval);
       interval = setInterval(() => {
@@ -204,7 +198,7 @@ function speak(text) {
         }
       }, 1000);
     }
-    
+
     function weightedRandomVerb() {
       const keys = Object.keys(verbs);
       const pool = keys.flatMap(key => {
@@ -214,39 +208,47 @@ function speak(text) {
       });
       return pool[Math.floor(Math.random() * pool.length)];
     }
-    
+
     function nextQuestion() {
       let tries = 0;
       const availableTenses = tenses.filter(t => !excludedTenses.includes(t));
       const availablePersons = [0,1,2,3,4,5].filter(p => !excludedPersons.includes(p));
-      if (availableTenses.length===0||availablePersons.length===0) { alert("Bitte wähle mindestens eine Zeitform und eine Person aus."); abortSession(); return; }
+      if (availableTenses.length === 0 || availablePersons.length === 0) {
+        alert("Bitte wähle mindestens eine Zeitform und eine Person aus.");
+        abortSession();
+        return;
+      }
       do {
         currentVerb = weightedRandomVerb();
-        currentTense = availableTenses[Math.floor(Math.random()*availableTenses.length)];
-        currentPerson = availablePersons[Math.floor(Math.random()*availablePersons.length)];
-        tries++; if (tries>100) { alert("Keine gültige Kombination gefunden. Bitte überprüfe deine Filter."); abortSession(); return; }
+        currentTense = availableTenses[Math.floor(Math.random() * availableTenses.length)];
+        currentPerson = availablePersons[Math.floor(Math.random() * availablePersons.length)];
+        tries++;
+        if (tries > 100) {
+          alert("Keine gültige Kombination gefunden. Bitte überprüfe deine Filter.");
+          abortSession();
+          return;
+        }
       } while (excludedVerbs.includes(currentVerb));
-    
+
       const form = verbs[currentVerb][currentTense];
       correctAnswer = form[currentPerson];
       questionBox.textContent = `${currentVerb} – ${currentTense} – ${persons[currentPerson]}`;
-      prefix.textContent = (correctAnswer.match(/^(j'|j’|je|tu|il|elle|nous|vous|ils|elles|je me|je m'|je m’)/i)||[''])[0]+' ';
+      prefix.textContent = persons[currentPerson] + ' ';
       feedback.textContent = "";
       answerInput.value = "";
       answerInput.focus();
       submitBtn.style.display = "inline-block";
       nextBtn.style.display = "none";
-    
-      // Spreche das Infinitiv sofort
       speak(currentVerb);
     }
-    
+
     function submitAnswer() {
-      const clean = s => s.toLowerCase().replace(/^(je|j'|j’|tu|il|elle|nous|vous|ils|elles|je me|je m'|je m’)\s+/, "").trim();
+      const expectedPrefix = persons[currentPerson].toLowerCase();
+      const escapeRegExp = str => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const clean = s => s.toLowerCase().replace(new RegExp('^' + escapeRegExp(expectedPrefix) + '\\s+'), '').trim();
       const user = clean(answerInput.value);
       const correct = clean(correctAnswer);
-    
-      // initialize nested stats
+
       learnedStats[currentVerb] = learnedStats[currentVerb] || {};
       learnedStats[currentVerb][currentTense] = learnedStats[currentVerb][currentTense] || {};
       const prev = learnedStats[currentVerb][currentTense][currentPerson] || 0;
@@ -262,25 +264,24 @@ function speak(text) {
       localStorage.setItem("learnedStats", JSON.stringify(learnedStats));
       submitBtn.style.display = "none";
       nextBtn.style.display = "inline-block";
-    
-      // Spreche die Lösung ohne doppeltes Pronomen
-      const correctSpoken = correctAnswer.replace(/^(je|j'|j’|tu|il|elle|nous|vous|ils|elles|je me|je m'|je m’)\s+/i, '');
+
+      const correctSpoken = correctAnswer.replace(new RegExp('^' + escapeRegExp(expectedPrefix) + '\\s+', 'i'), '');
       speak((prefix.textContent.trim() + ' ' + correctSpoken).trim());
     }
-    
+
     function finishSession() {
-      const actualMinutes = Math.round((Date.now() - sessionStart)/60000);
+      const actualMinutes = Math.round((Date.now() - sessionStart) / 60000);
       totalMinutes += actualMinutes;
       localStorage.setItem("totalMinutes", totalMinutes);
       quiz.style.display = "none";
       result.style.display = "block";
     }
-    
+
     function abortSession() {
       clearInterval(interval);
       finishSession();
     }
-    
+
     function toggleDetails(verb, container) {
       if (container.innerHTML) {
         container.style.display = container.style.display === 'none' ? 'block' : 'none';
@@ -293,7 +294,7 @@ function speak(text) {
         html += `<tr><td>${tensesDisplay[t]}</td>`;
         persons.forEach((_, i) => {
           const s = (learnedStats[verb] && learnedStats[verb][t] && learnedStats[verb][t][i]) || 0;
-          let icon = '❌'; if (s >=5) icon='✅'; else if (s>=3) icon='🟡';
+          let icon = '❌'; if (s >= 5) icon = '✅'; else if (s >= 3) icon = '🟡';
           html += `<td>${icon}</td>`;
         });
         html += '</tr>';
@@ -302,7 +303,7 @@ function speak(text) {
       container.innerHTML = html;
       container.style.display = 'block';
     }
-    
+
     function showOverview() {
       setup.style.display = "none";
       overview.style.display = "block";
@@ -322,7 +323,7 @@ function speak(text) {
         });
       });
     }
-    
+
     function restart() {
       result.style.display = "none";
       overview.style.display = "none";
@@ -330,7 +331,7 @@ function speak(text) {
       setup.style.display = "block";
       totalDisplay.textContent = `Bisher insgesamt geübt: ${totalMinutes} Minute(n)`;
     }
-    
+
     window.startSession = startSession;
     window.abortSession = abortSession;
     window.restart = restart;
@@ -339,8 +340,9 @@ function speak(text) {
     window.hideFilter = hideFilter;
     nextBtn.addEventListener("click", nextQuestion);
     submitBtn.addEventListener("click", submitAnswer);
-    answerInput.addEventListener("keydown", e => { if (e.key === "Enter" && submitBtn.style.display !== "none") submitAnswer(); });
-    </script>
-    
+    answerInput.addEventListener("keydown", e => {
+      if (e.key === "Enter" && submitBtn.style.display !== "none") submitAnswer();
+    });
+  </script>
 </body>
 </html>
